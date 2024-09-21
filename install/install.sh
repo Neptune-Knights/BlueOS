@@ -209,7 +209,8 @@ docker pull $BLUEOS_BOOTSTRAP
 docker pull $BLUEOS_CORE
 
 # Set up default extensions
-curl -fsSL $ROOT/install/kraken/set_default_extensions.sh | bash
+#curl -fsSL $ROOT/install/kraken/set_default_extensions.sh | bash
+#removing default extensions instal 9/21/24
 
 # Use current release version for factory fallback
 docker image tag $BLUEOS_CORE $BLUEOS_FACTORY
