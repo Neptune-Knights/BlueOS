@@ -3,11 +3,11 @@
 # Set desired version to be installed
 VERSION="${VERSION:-master}"
 GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-bluerobotics/blueos-docker}
-DOCKER_USER=${DOCKER_USER:-$(echo $GITHUB_REPOSITORY | cut -d'/' -f1)}
+DOCKER_USER=${DOCKER_USER:-$(echo $GITHUB_REPOSITORY | cut -d'/' -f1 | tr '[:upper:]' '[:lower:]')}
 REMOTE="${REMOTE:-https://raw.githubusercontent.com/${GITHUB_REPOSITORY}}"
 ROOT="$REMOTE/$VERSION"
 
-alias curl="curl --retry 6 --max-time 15 --retry-all-errors"
+alias curl="curl --retry 6 --max-time 15 --retry-all-errors --retry-delay 20 --connect-timeout 60"
 
 # Additional options
 DO_BOARD_CONFIG=1 # default to do the board config
@@ -227,8 +227,14 @@ docker create \
     -e BLUEOS_CONFIG_PATH=$HOME/.config/blueos \
     $BLUEOS_BOOTSTRAP
 
-# add docker entry to rc.local
-sed -i "\%^exit 0%idocker start blueos-bootstrap" /etc/rc.local || echo "Failed to add docker start on rc.local, BlueOS will not start on boot!"
+# Ensure docker can run without sudo
+groupadd docker || true
+usermod -aG docker pi || true
+
+# Create service to start blueos-bootstrap container on boot
+curl -fsSL "$ROOT/install/configs/blueos.service" -o /etc/systemd/system/blueos.service
+systemctl start blueos
+systemctl enable blueos
 
 # Configure network settings
 ## This should be after everything, otherwise network problems can happen

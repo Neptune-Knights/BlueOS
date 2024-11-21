@@ -34,7 +34,20 @@
               <v-expansion-panels>
                 <v-expansion-panel>
                   <v-expansion-panel-header>
-                    Quick Compass Calibration
+                    Full (Onboard) Calibration
+                  </v-expansion-panel-header>
+                  <v-expansion-panel-content>
+                    <p>
+                      This does a full calibration of the compasses.
+                      It requires you to spin the vehicle around manually multiple times.
+                      You need to move the vehicle around in all 3 axis.
+                    </p>
+                    <full-compass-calibrator :compasses="compasses" />
+                  </v-expansion-panel-content>
+                </v-expansion-panel>
+                <v-expansion-panel>
+                  <v-expansion-panel-header>
+                    Large Vehicle Calibration
                   </v-expansion-panel-header>
                   <v-expansion-panel-content>
                     <p>
@@ -58,19 +71,6 @@
                       you see the message <b>"CompassLearn: finished"</b>
                     </p>
                     <compass-learn :compasses="compasses" />
-                  </v-expansion-panel-content>
-                </v-expansion-panel>
-                <v-expansion-panel>
-                  <v-expansion-panel-header>
-                    Onboard Calibration
-                  </v-expansion-panel-header>
-                  <v-expansion-panel-content>
-                    <p>
-                      This does a full calibration of the compasses.
-                      It requires you to spin the vehicle around manually multiple times.
-                      You need to move the vehicle around in all 3 axis.
-                    </p>
-                    <full-compass-calibrator :compasses="compasses" />
                   </v-expansion-panel-content>
                 </v-expansion-panel>
                 <v-expansion-panel>
@@ -247,7 +247,7 @@ export default Vue.extend({
   data() {
     return {
       tab: 0,
-      color_options: ['green', 'blue', 'purple'],
+      color_options: ['green', 'blue', 'purple', 'red', 'orange', 'brown', 'grey', 'black'],
       reordered_compasses: [] as deviceId[],
       edited_param: undefined as (undefined | Parameter),
       edit_param_dialog: false,
@@ -261,6 +261,8 @@ export default Vue.extend({
       for (const [index, compass] of sorted_compasses.entries()) {
         results[compass.paramValue] = this.color_options[index % this.color_options.length]
       }
+      results.GPS1 = 'grey'
+      results.GPS2 = 'black'
       return results
     },
     compass_autodec(): Parameter | undefined {
@@ -426,7 +428,7 @@ export default Vue.extend({
       for (const [index, compass] of compasses.entries()) {
         const param_name = `COMPASS_PRIO${index + 1}_ID`
         const param = autopilot_data.parameter(param_name)
-        if (param?.value !== compass.paramValue) {
+        if (param && param?.value !== compass.paramValue) {
           mavlink2rest.setParam(param_name, compass.paramValue, autopilot_data.system_id)
           autopilot_data.setRebootRequired(true)
         }

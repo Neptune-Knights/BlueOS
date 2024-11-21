@@ -9,7 +9,7 @@ from typing import List, Tuple
 
 import appdirs
 from commonwealth.utils.commands import run_command, save_file, locate_file, load_file
-from commonwealth.utils.general import CpuType, HostOs, get_cpu_type, get_host_os
+from commonwealth.utils.general import HostOs, CpuType, get_cpu_type, get_host_os
 from commonwealth.utils.logs import InterceptHandler, init_logger
 from loguru import logger
 
@@ -36,6 +36,7 @@ DELTA_JSON = {
             "/usr/blueos/extensions": {"bind": "/usr/blueos/extensions", "mode": "rw"},
             "/usr/blueos/userdata": {"bind": "/usr/blueos/userdata", "mode": "rw"},
             "/var/run/wpa_supplicant": {"bind": "/var/run/wpa_supplicant", "mode": "rw"},
+            "/var/run/dbus": {"bind": "/var/run/dbus", "mode": "rw"},
         }
     }
 }
@@ -259,13 +260,13 @@ def update_dwc2() -> bool:
 
     # Add dwc2 overlay in pi4 section if it doesn't exist
     dwc2_overlay_config = "dtoverlay=dwc2,dr_mode=otg"
-    pi4_session_name = "pi4"
-    boot_config_add_configuration_at_session(config_content, dwc2_overlay_config, pi4_session_name)
+    session_name = "pi4" if get_cpu_type() == CpuType.PI4 else "pi5"
+    boot_config_add_configuration_at_session(config_content, dwc2_overlay_config, session_name)
 
     # Remove any unprotected and conflicting dwc2 overlay configuration
     dwc2_overlay_match_pattern = "^[#]*dtoverlay=dwc2.*$"
     config_content = boot_config_filter_conflicting_configuration_at_session(
-        config_content, dwc2_overlay_match_pattern, dwc2_overlay_config, pi4_session_name
+        config_content, dwc2_overlay_match_pattern, dwc2_overlay_config, session_name
     )
 
     # Save if needed, with backup
@@ -403,6 +404,29 @@ def fix_ssh_ownership() -> bool:
     return False
 
 
+def fix_wpa_service() -> bool:
+    """
+    Adds -i wlan0 and -c /etc/wpa_supplicant/wpa_supplicant.conf to the wpa_supplicant service
+    This is needed to make the service actually consume the .conf file with update_config=1
+    """
+    logger.info("checking wpa_supplicant service...")
+    file_path = "/lib/systemd/system/wpa_supplicant.service"
+    original_file = load_file(file_path)
+    # extract execstart line
+    execstart_line = next((line for line in original_file.splitlines() if line.startswith("ExecStart=")), None)
+    if execstart_line and "-i " in execstart_line and "-c " in execstart_line:
+        # the settings are there. not our job to check if they are the ones we want
+        return False
+    new_execstart_line = execstart_line
+    if "-i " not in execstart_line:
+        new_execstart_line = new_execstart_line + " -i wlan0"
+    if "-c " not in execstart_line:
+        new_execstart_line = new_execstart_line + " -c /etc/wpa_supplicant/wpa_supplicant.conf"
+    original_file = original_file.replace(execstart_line, new_execstart_line)
+    save_file(file_path, original_file, "before_fix_wpa_service")
+    return True
+
+
 def main() -> int:
     start = time.time()
     # check if boot_loop_detector exists
@@ -441,7 +465,7 @@ def main() -> int:
     ]
 
     # this will always be pi4 as pi5 is not supported
-    if host_os == HostOs.Bullseye:
+    if host_cpu == CpuType.PI4:
         patches_to_apply.extend([update_navigator_overlays])
 
     if host_cpu == CpuType.PI4 or CpuType.PI5:
@@ -451,6 +475,8 @@ def main() -> int:
                 update_dwc2,
             ]
         )
+    if host_os == HostOs.Bookworm:
+        patches_to_apply.extend([fix_wpa_service])
 
     logger.info("The following patches will be applied if needed:")
     for patch in patches_to_apply:
